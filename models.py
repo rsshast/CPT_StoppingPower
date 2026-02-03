@@ -821,7 +821,7 @@ class LiPetrassoStoppingPower():
         # visualize
         self.get_phi()
         if track_particles: self.plot_paths()
-        #self.animate()
+        self.animate()
         self.plot_group_flux()
 
     def plot_paths(self):
