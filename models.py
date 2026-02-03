@@ -821,7 +821,7 @@ class LiPetrassoStoppingPower():
         # visualize
         self.get_phi()
         if track_particles: self.plot_paths()
-        self.animate()
+        #self.animate()
         self.plot_group_flux()
 
     def plot_paths(self):
@@ -925,7 +925,7 @@ class LiPetrassoStoppingPower():
         for g in range(self.groups):
             t_arg = np.searchsorted(self.timesteps, self.t_f / 10)
             plt.figure(figsize=(8,6))
-            plt.imshow(self.phi[:,:,g,t_arg], cmap=cmap,origin="lower", extent=[0,self.length,0,self.width],vmin=0)
+            plt.imshow(self.phi[:,:,g,t_arg], cmap=self.cmap,origin="lower", extent=[0,self.length,0,self.width],vmin=0)
             plt.colorbar()
             plt.title(fr"Stopping Power $\phi(x,y,g={g+1})$ at t={t_f/10:3g}s")
             plt.savefig(f"fluxes/lipetrasso/phi_g{g+1}.png")
