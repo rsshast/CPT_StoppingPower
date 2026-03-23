@@ -172,6 +172,7 @@ class LPSTP_3D():
                 I, J, K = [min(int(particle[idx] / self.dx), int(dim / self.dx) - 1) 
                            for idx, dim in zip([0, 1, 2], [self.length, self.width, self.height])]
 
+                #only comment out dmin for quadratic model
                 dmin = jit_min_d_boundary(particle[0], particle[1], particle[2], u, v, w, I, J, K, self.dx)
 
                 t_idx = min(int(particle[4] / self.dt + self.eps), len(self.timesteps) - 1)
@@ -179,17 +180,24 @@ class LPSTP_3D():
                 cumulative_heat = np.sum(self.E_dep[I, J, K, :t_idx + 1])
                 local_T_beta = self.T_beta_0 + (cumulative_heat / self.sie)
 
-                self.S[I, J, K] = self.S_const
+                ## --- CONSTANT --- ##
+                S_val = self.S_const
+                ## --- QUADRATIC --- ##
+                #tq = particle[4] - birth_time
+                #S_val = self.S_const * (tq * tq) + 1e-30
+                #S_val = max(self.S_const * (tq * tq), 1e-30)
 
+                self.S[I, J, K] = S_val
                 v_cell = np.sqrt(2 * particle[3] / self.m_alpha)
                 current_cycle = int(particle[4] / self.dt + self.eps)
                 time_remaining_in_step = ((current_cycle + 1) * self.dt) - particle[4]
 
                 max_time_dist = v_cell * time_remaining_in_step
-                max_dist_before_death = (particle[3] - self.E_cutoff) / self.S_const
+                max_dist_before_death = (particle[3] - self.E_cutoff) / S_val
 
+                #actual_dist = min(max_dist_before_death, max_time_dist)
                 actual_dist = min(dmin, max_dist_before_death, max_time_dist)
-                actual_loss = self.S_const * actual_dist
+                actual_loss = S_val * actual_dist
 
                 self.tally_E_dep(I, J, K, t_idx, actual_loss)
                 #self.tally_phi(I, J, K, t_idx, dmin)
@@ -228,11 +236,13 @@ class LPSTP_3D():
             for p_idx in range(pulses_this_step):
                 if t_idx == 0 and p_idx == 0:
                     particles_to_source = self.nparts_initial
+
+            for p_idx in range(pulses_this_step):
+                if t_idx == 0 and p_idx == 0:
+                    particles_to_source = self.nparts_initial
                 else:
-                    # Sinusoidal Source Strategy
-                    # Scale dt to ns to prevent spawning trillions of particles
-                    dt_ns = self.dt * 1e9
-                    val = np.sin(np.pi * current_time / self.tf) / dt_ns
+                    # Match the discrete analytical array: max 10 particles per pulse
+                    val = 10.0 * np.sin(np.pi * current_time / self.tf)
                     particles_to_source = int(np.floor(val))
 
                 # Only source if there are actually particles to inject
@@ -252,8 +262,8 @@ class LPSTP_3D():
         print(f"Total Transport Time: {np.round(time.time() - stt, 5)}s")
         print(f"Total Simulated Histories: {global_history_id}")
 
-        self.plot_average_kinetic_energy()
-        #self.plot_average_kinetic_energy_sine()
+        #self.plot_average_kinetic_energy()
+        self.plot_average_kinetic_energy_sine()
 
     def plot_average_kinetic_energy(self):
         stt = time.time()
@@ -287,7 +297,8 @@ class LPSTP_3D():
         active_particles = cumulative_particles - cumulative_dead
 
         U_t_over_E0 = e_kin_active_erg / self.E0
-        np.savetxt("Ut_case4.txt",U_t_over_E0) # save data
+        np.savetxt("quad_UT_case3.txt",U_t_over_E0) # save data
+        #tau = 0.0013758674831213246
         tau = 8.68177578551766e-10
         t_over_tau = self.timesteps / tau
 
@@ -308,7 +319,7 @@ class LPSTP_3D():
 
         os.makedirs('fluxes/npp', exist_ok=True)
         plt.tight_layout()
-        plt.savefig(f'fluxes/npp/avg_ke_multipulse_dx_{self.dx}_pulses_{self.npulses}.png', dpi=300)
+        plt.savefig(f'fluxes/npp/quad_ke_multipulse_dx_{self.dx}_pulses_{self.npulses}.png', dpi=300)
 
         print(f"Average KE curve saved in {np.round(time.time() - stt, 3)}s.")
 
@@ -332,8 +343,8 @@ class LPSTP_3D():
                 if t_idx == 0 and p == 0:
                     current_particle_count += self.nparts_initial * self.weight
                 else:
-                    dt_ns = self.dt * ns
-                    pts = int(np.floor(np.sin(np.pi * current_time / self.tf) / dt_ns))
+                    # Exact match to the analytical discrete math
+                    pts = int(np.floor(10.0 * np.sin(np.pi * current_time / self.tf)))
                     current_particle_count += pts * self.weight
 
             cumulative_particles[t_idx] = current_particle_count
@@ -350,6 +361,7 @@ class LPSTP_3D():
 
         # Calculate Total Active KE normalized by E0 (matches U(t)/E0)
         U_t_over_E0 = e_kin_active_erg / self.E0
+        np.savetxt("Ut_case4.txt",U_t_over_E0) # save data
 
         # True tau in seconds
         tau = 8.68177578551766e-10
@@ -358,7 +370,7 @@ class LPSTP_3D():
         fig, ax = plt.subplots(figsize=(10, 6))
 
         # Plot Normalized Total KE
-        ax.plot(t_over_tau, U_t_over_E0, label=r'$U(t)/E_0$ (Active Alphas)', color='blue', linewidth=2)
+        ax.plot(t_over_tau, U_t_over_E0, label=r'$U(t)/E_0$', color='blue', linewidth=2)
 
         ax.axvline(1.0, label=r'$\tau$', linestyle='-.', color='black')
         ax.set_title(f'Normalized Total Kinetic Energy of Active Population\n(Sinusoidal Source)', fontsize=14)
@@ -378,7 +390,7 @@ class LPSTP_3D():
 
 # simulation parameters
 nparts_initial = 2000
-nparts_per_pulse = 20
+nparts_per_pulse = 10
 track_particles = False
 verbose = True
 ww = 1
@@ -389,12 +401,14 @@ height = 1
 dx = .25
 eps = 1e-8
 
-tf = 1.73809325e-9
+pulses = 2000
+#tf = 2.75173497e-03
+#dt = 2.75448946e-06
 dt = 1.73809325e-12
-pulses = 1000
+tf = 1.73635516e-09
 
 E0 = 3.54 # MeV
-Eb = 0.0  # Background energy set to 0.0
+Eb = 0.001  # Background energy set to 0.0
 Tbeta = 1e7 
 
 lp3d = LPSTP_3D(nparts_initial, nparts_per_pulse, ww, pulses, 
